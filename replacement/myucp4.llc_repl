@@ -1,0 +1,691 @@
+#include "cache.h"
+#define maxRRPV 31
+
+uint32_t partition_array[5][4]={{2,1,4,9},{5,6,3,1},{5,5,5,1},{3,5,2,6},{1,5,5,5}}; //Setting partitioning in the array 
+uint32_t rrpv[LLC_SET][LLC_WAY]; // For maintaining SRRIP replacement policy in LLC
+uint32_t count1[LLC_SET]; // Maintains number of blocks requested by core 1 corresponding to each set
+uint32_t count2[LLC_SET]; // Maintains number of blocks requested by core 2 corresponding to each set
+uint32_t count3[LLC_SET]; // Maintains number of blocks requested by core 3 corresponding to each set
+uint32_t count4[LLC_SET]; // Maintains number of blocks requested by core 4 corresponding to each set
+uint32_t currind;   // For recording which partitioning is currently going on
+uint32_t counter;  // To update the partitioning after a fixed number of memory accesses 
+
+// initialize replacement state
+void CACHE::llc_initialize_replacement()
+{
+	for (int i=0; i<LLC_SET; i++) // Initially flushing the LLc cache
+	{     
+        count1[i]=0;
+        count2[i]=0;
+        count3[i]=0;
+        count4[i]=0;
+    }
+    for (int i=0; i<LLC_SET; i++) // Initializing RRPV values of LLC cache
+    {
+        for (int j=0; j<LLC_WAY; j++) 
+        {
+            rrpv[i][j] = maxRRPV;
+        }
+    }
+	currind=0;
+    counter=0;
+}
+
+// find replacement victim
+uint32_t CACHE::llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+	if(cpu == 0) 
+	{
+		if(count1[set]>=partition_array[currind][0]) // Selecting core 1 block as eviction candidate 
+        {
+			int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==0)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==0)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+			}
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            } 
+        }
+        else if(count2[set]>=partition_array[currind][1]) // Selecting core 2 block as eviction candidate 
+        {
+		    count2[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==1)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==1)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+			}
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else if(count3[set]>=partition_array[currind][2]) // Selecting core 3 block as eviction candidate 
+        {
+		    count3[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==2)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==2)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else // Selecting core 4 block as eviction candidate 
+        {
+		    count4[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==3)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==3)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+	}
+    else if(cpu == 1) 
+    {
+		if(count2[set]>=partition_array[currind][1]) // Selecting core 2 block as eviction candidate 
+        {
+			int temp = 32;
+            while(temp)
+			 {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==1)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==1)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            } 
+        }
+        else if(count1[set]>=partition_array[currind][0]) // Selecting core 1 block as eviction candidate 
+        {
+		    count1[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==0)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==0)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else if(count3[set]>=partition_array[currind][2]) // Selecting core 3 block as eviction candidate 
+        {
+		    count3[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==2)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==2)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else // Selecting core 4 block as eviction candidate 
+        {
+		    count4[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==3)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==3)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+	}
+    else if(cpu == 2) 
+    {
+		if(count3[set]>=partition_array[currind][2]) // Selecting core 3 block as eviction candidate 
+        {
+			int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==2)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==2)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            } 
+        }
+        else if(count1[set]>=partition_array[currind][0]) // Selecting core 1 block as eviction candidate 
+        {
+		    count1[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==0)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==0)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+		else if(count2[set]>=partition_array[currind][1]) // Selecting core 2 block as eviction candidate 
+        {
+		    count2[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==1)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==1)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else // Selecting core 4 block as eviction candidate 
+        {
+		    count4[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==3)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==3)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+	}
+    else 
+    {
+		if(count4[set]>=partition_array[currind][3]) // Selecting core 4 block as eviction candidate 
+        {
+			int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==3)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==3)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            } 
+        }
+        else if(count1[set]>=partition_array[currind][0]) // Selecting core 1 block as eviction candidate 
+        {
+		    count1[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==0)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==0)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else if(count2[set]>=partition_array[currind][1]) // Selecting core 2 block as eviction candidate 
+        {
+		    count2[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==1)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==1)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+        else // Selecting core 3 block as eviction candidate 
+        {
+		    count3[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&block[set][i].cpu==2)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu==2)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }      
+        }	
+	}     
+}
+
+// called on every cache hit and cache fill
+void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit)
+{
+	counter++;
+    if(counter>1000)                  // After every 1000 memory accesses update partitioning
+    {
+        counter=0;
+        currind=(currind+1)%5;
+    }
+    
+    string TYPE_NAME;
+    if (type == LOAD)
+        TYPE_NAME = "LOAD";
+    else if (type == RFO)
+        TYPE_NAME = "RFO";
+    else if (type == PREFETCH)
+        TYPE_NAME = "PF";
+    else if (type == WRITEBACK)
+        TYPE_NAME = "WB";
+    else
+        assert(0);
+
+    if (hit)
+        TYPE_NAME += "_HIT";
+    else {
+        TYPE_NAME += "_MISS";
+	  if(cpu==0)
+		count1[set]++;
+	  else if(cpu==1)
+		count2[set]++;
+	  else if(cpu==2)	
+        count3[set]++;
+      else
+        count4[set]++;
+	}
+    
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+    if (hit)
+        rrpv[set][way] = 0;
+    else
+        rrpv[set][way] = maxRRPV-1;
+
+    // uncomment this line to see the LLC accesses
+    // cout << "CPU: " << cpu << "  LLC " << setw(9) << TYPE_NAME << " set: " << setw(5) << set << " way: " << setw(2) << way;
+    // cout << hex << " paddr: " << setw(12) << paddr << " ip: " << setw(8) << ip << " victim_addr: " << victim_addr << dec << endl;
+  
+}
+
+void CACHE::llc_replacement_final_stats()
+{
+
+}

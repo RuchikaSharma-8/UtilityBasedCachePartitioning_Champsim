@@ -1,0 +1,348 @@
+#include "cache.h"
+#define maxRRPV 31
+
+uint32_t rrpv1[32][LLC_WAY]; // For maintaining SRRIP replacement policy in ATD 1
+uint32_t rrpv2[32][LLC_WAY]; // For maintaining SRRIP replacement policy in ATD 2
+uint32_t rrpv[LLC_SET][LLC_WAY]; // For maintaining SRRIP replacement policy in LLC
+uint32_t par1; // Number of ways alloted to core 1
+uint32_t par2; // Number of ways alloted to core 2
+uint32_t count1[LLC_SET]; // Maintains number of blocks requested by core 1 corresponding to each set
+uint32_t count2[LLC_SET]; // Maintains number of blocks requested by core 2 corresponding to each set
+uint32_t atd1[32][LLC_WAY]; // Additional Tag Directory handling core 1 requests
+uint32_t atd2[32][LLC_WAY]; // Additional Tag Directory handling core 2 requests
+uint32_t hit_counter1[LLC_WAY]; // Total hits associated with each way in ATD 1
+uint32_t hit_counter2[LLC_WAY]; // Total hits associated with each way in ATD 2
+uint32_t currtag; // Stores the tag part of requested block
+uint32_t counter; // To update the partitioning after a fixed number of memory accesses 
+uint32_t maximumhit; // Maintains optimal partition hits
+uint32_t totalhit1; // Temporary variable to store total number of hits for given number of way alloted to core 1
+uint32_t totalhit2; // Temporary variable to store total number of hits for given number of way alloted to core 2
+uint32_t flag; // Value of 0 signals miss & value of 1 signals hit
+
+// initialize replacement state
+void CACHE::llc_initialize_replacement()
+{
+	counter=0;
+    par1=8;
+    par2=8; 
+    for (int i=0; i<LLC_SET; i++) // Initially flushing the LLc cache
+    {
+        count1[i]=0;
+        count2[i]=0;
+    }
+    for(int i=0;i<16;i++) // Initializing hit counters of both ATDs
+    {
+        hit_counter1[i]=0;
+        hit_counter2[i]=0;
+    }
+    for (int i=0; i<32; i++) 
+    {
+    	for (int j=0; j<LLC_WAY; j++) // Initializing RRPV values of each block of both ATDs
+    	{
+            rrpv1[i][j] = maxRRPV;
+            rrpv2[i][j] = maxRRPV;
+        }
+    }
+    for (int i=0; i<LLC_SET; i++) 
+    {
+        for (int j=0; j<LLC_WAY; j++)  // Initializing RRPV values of LLC cache
+        {
+            rrpv[i][j] = maxRRPV;
+        }
+    }    
+}
+
+// find replacement victim
+uint32_t CACHE::llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+	if(cpu == 0) 
+	{
+		if(count1[set]>=par1) // Selecting core 1 block as eviction candidate 
+        {
+        	int temp = 32;
+            while(temp)
+			{
+            	for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV && (1-block[set][i].cpu))
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(1-block[set][i].cpu)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+			}
+            while(1)
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }
+		}
+        else // Selecting core 2 block as eviction candidate 
+        {
+		    count2[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV && block[set][i].cpu)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+             }
+			while(1)
+            {
+             	for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }
+		}		
+	}
+    else 
+    {
+		if(count2[set]>=par2) // Selecting core 2 block as eviction candidate 
+        {
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV && block[set][i].cpu)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(block[set][i].cpu)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+			}
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }
+		}
+        else // Selecting core 1 block as eviction candidate 
+        {
+            count1[set]--;
+		    int temp = 32;
+            while(temp)
+			{
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV&&(1-block[set][i].cpu))
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(1-block[set][i].cpu)
+                    {
+                        rrpv[set][i]++;
+                    }
+                }
+                temp--;
+            }
+            while(1) 
+            {
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    if(rrpv[set][i]==maxRRPV)
+                    {
+                        return i;
+                    }
+                }
+                for(int i=0;i<LLC_WAY;i++)
+                {
+                    rrpv[set][i]++;
+                }
+            }
+        }
+	}
+}
+
+// called on every cache hit and cache fill
+void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit)
+{
+    counter++;
+    if(counter>1000) // After every 1000 memory accesses update partitioning
+    {
+        counter=0;
+        totalhit1=hit_counter1[0];
+        totalhit2=0;
+        for(int i=0;i<15;i++)
+        {
+        	totalhit2+=hit_counter2[i];
+        }
+        maximumhit=totalhit1+totalhit2;
+        par1=1;
+        par2=15;
+        for(int i=1;i<15;i++)
+        {
+            totalhit1+=hit_counter1[i];
+            totalhit2-=hit_counter2[15-i];
+            if(totalhit1+totalhit2>maximumhit)
+            {
+                maximumhit=totalhit1+totalhit2;
+                par1=i+1;
+                par2=15-i;
+            }
+        }
+        for(int i=0;i<16;i++)
+      	{
+        	hit_counter1[i]=0;
+          	hit_counter2[i]=0;
+      	}
+    }
+
+    string TYPE_NAME;
+    if (type == LOAD)
+        TYPE_NAME = "LOAD";
+    else if (type == RFO)
+        TYPE_NAME = "RFO";
+    else if (type == PREFETCH)
+        TYPE_NAME = "PF";
+    else if (type == WRITEBACK)
+        TYPE_NAME = "WB";
+    else
+        assert(0);
+
+    if (hit)
+        TYPE_NAME += "_HIT";
+    else {
+        TYPE_NAME += "_MISS";
+	    if(cpu==0)
+			count1[set]++;
+	    else if(cpu==1)
+			count2[set]++;
+	}
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    if (hit)
+        rrpv[set][way] = 0;
+    else
+        rrpv[set][way] = maxRRPV-1;
+    
+    
+    currtag=full_addr>>LOG2_BLOCK_SIZE;
+    currtag=currtag>>12;
+    flag=1;
+    
+    if((set>=0)&&(set<32)) // Modifying ADT if set corresponding to requested block is a part of sample of sets taken in ADT
+    {
+        for(int i=0;i<LLC_WAY;i++)
+        {
+            if(cpu==0)
+            {
+                if(atd1[set][i]==currtag)
+                {
+                    hit_counter1[i]++;
+                    rrpv1[set][i]=0;
+                    flag=0;
+                }
+            }
+            else
+            {
+                if(atd2[set][i]==currtag)
+                {
+                    hit_counter2[i]++;
+                    rrpv2[set][i]=0;
+                    flag=0;
+                }
+            }
+        }
+        if(cpu==0) // If request is coming from core 1 update ADT 1
+        {
+            while (flag)
+            {
+		        for (int i=0; (i<LLC_WAY)&&(flag); i++)
+		        {
+		            if (rrpv1[set][i] == maxRRPV)
+		            {
+		                atd1[set][i]=currtag;
+		                rrpv1[set][i]=30;
+		                flag=0;
+		            }
+		        }
+
+				for (int i=0; (i<LLC_WAY)&&(flag); i++)
+				{ 
+					rrpv1[set][i]++;
+				}
+            }
+        }
+        else // If request is coming from core 2 update ADT 2
+        {
+            while(flag)
+            {
+                for (int i=0; (i<LLC_WAY)&&(flag); i++)
+            	{
+		            if (rrpv2[set][i] == maxRRPV)
+		            {
+		                atd2[set][i]=currtag;
+		                rrpv2[set][i]=30;
+		                flag=0;
+		            }
+            	}
+				for (int i=0; (i<LLC_WAY)&&(flag); i++)
+				{ 
+					rrpv2[set][i]++;
+			    }
+            }
+        }
+	}
+}
+
+void CACHE::llc_replacement_final_stats()
+{
+
+}
